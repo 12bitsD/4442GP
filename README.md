@@ -1,5 +1,7 @@
 # 驾驶行为监控系统 (Driver Behavior Monitoring System)
 
+🌐 [English Version](README_EN.md)
+
 ## 项目简介
 
 这是一个基于 Web 的驾驶行为实时监控与数据分析系统，用于检测和记录驾驶员的超速、疲劳驾驶、空挡滑行等危险行为。
