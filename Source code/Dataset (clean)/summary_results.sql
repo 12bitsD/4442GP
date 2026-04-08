@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS driver_behavior_summary (driverID VARCHAR(50), carPlateNumber VARCHAR(20), overspeed_count INT, fatigue_count INT, total_overspeed_sec INT, total_neutral_slide_sec INT);
+INSERT INTO driver_behavior_summary VALUES ('zouan1000007', '华A58M83', 3181, 3594, 31248, 2997);
+INSERT INTO driver_behavior_summary VALUES ('duxu1000009', '华AT75H8', 2301, 2814, 22338, 2632);
+INSERT INTO driver_behavior_summary VALUES ('hanhui1000002', '华AZI419', 3349, 3997, 31813, 2844);
+INSERT INTO driver_behavior_summary VALUES ('panxian1000005', '华AX542C', 3531, 4307, 33946, 2930);
+INSERT INTO driver_behavior_summary VALUES ('haowei1000008', '华A709GB', 2639, 3204, 25522, 2659);
+INSERT INTO driver_behavior_summary VALUES ('shenxian1000004', '华ADJ750', 3126, 3767, 31494, 2810);
+INSERT INTO driver_behavior_summary VALUES ('likun1000003', '华AVM936', 3044, 3552, 28728, 3043);
+INSERT INTO driver_behavior_summary VALUES ('zengpeng1000000', '华AZQ110', 2763, 3274, 25479, 2894);
+INSERT INTO driver_behavior_summary VALUES ('xiezhi1000006', '华A6CU11', 2535, 2931, 23942, 2074);
+INSERT INTO driver_behavior_summary VALUES ('xiexiao1000001', '华AEB132', 2324, 2720, 23434, 2525);

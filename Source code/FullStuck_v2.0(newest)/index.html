@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>驾驶行为监控系统</title>
+    <meta charset="utf-8">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1200px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        #chart-container { margin: 20px 0; }
+        .speed-card {
+            background: #e9ecef;
+            padding: 10px 20px;
+            border-radius: 8px;
+            display: inline-block;
+            margin-bottom: 15px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .speed-card.overspeed { background-color: #ffcccc; color: #cc0000; }
+        .refresh-info { margin: 10px 0; font-size: 14px; color: #555; }
+        .progress-bar {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        .progress-fill {
+            height: 8px;
+            background-color: #4caf50;
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.2s linear;
+        }
+        .controls { margin: 15px 0; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .controls input, .controls button, .controls select { padding: 6px 10px; }
+        .alert { background-color: #ffcccc; padding: 10px; margin: 10px 0; display: none; border-left: 4px solid #cc0000; }
+        .loading { color: blue; margin: 10px 0; }
+        .error { color: red; margin: 10px 0; }
+        button { cursor: pointer; }
+        .pagination { margin: 10px 0; display: flex; gap: 10px; align-items: center; }
+        .pagination input { width: 60px; text-align: center; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>驾驶行为监控系统</h1>
+
+    <div id="alert-box" class="alert">⚠️ 警告：检测到超速行为！</div>
+    <div id="loading-msg" class="loading">加载数据中...</div>
+    <div id="error-msg" class="error"></div>
+
+    <!-- 实时速度监控 -->
+    <h2>实时速度监控</h2>
+    <div>
+        <label for="driver-select">选择驾驶员：</label>
+        <select id="driver-select"></select>
+        <label for="date-select">选择日期：</label>
+        <select id="date-select"></select>
+    </div>
+    <div class="speed-card" id="current-speed-card">
+        当前速度：-- km/h
+    </div>
+    <div class="refresh-info" id="refresh-info">
+        下次刷新：<span id="countdown">30</span> 秒
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    </div>
+    <div id="chart-container">
+        <canvas id="speed-chart"></canvas>
+    </div>
+
+    <!-- 分页控件 -->
+    <div class="pagination" id="pagination">
+        <span>第 <span id="current-page">1</span> 页 / 共 <span id="total-pages">0</span> 页</span>
+        <span>(共 <span id="total-records">0</span> 条记录)</span>
+        <input type="number" id="goto-page" min="1" placeholder="页码">
+        <button id="goto-btn">跳转</button>
+    </div>
+
+    <!-- 驾驶员摘要表格 -->
+    <h2>驾驶员摘要</h2>
+    <table id="summary-table">
+        <thead>
+            <tr><th>驾驶员ID</th><th>车牌号</th><th>超速次数</th><th>疲劳驾驶次数</th><th>超速总时间(秒)</th><th>空挡滑行总时间(秒)</th>
+        </thead>
+        <tbody></tbody>
+</div>
+
+<script>
+    const API_BASE = 'http://localhost:5000';
+    let speedChart = null;
+    let autoRefreshTimer = null;
+    let highlightTimer = null;
+    let countdownTimer = null;
+    let lastAlertTime = 0;
+    let currentRecords = [];
+    let currentHighlightIndex = 0;
+    let isRealtimeMode = true;  // 总是实时模式，但现在是分页自动前进
+    let currentDriver = null;
+    let currentDate = null;
+    let currentPage = 1;
+    let totalPages = 0;
+    let totalRecords = 0;
+    let pageSize = 30;
+
+    // 获取司机摘要
+    async function loadSummary() {
+        try {
+            const res = await fetch(`${API_BASE}/api/summary`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const drivers = await res.json();
+
+            const tbody = document.querySelector('#summary-table tbody');
+            tbody.innerHTML = '';
+            const select = document.getElementById('driver-select');
+            select.innerHTML = '';
+
+            drivers.forEach(driver => {
+                const row = tbody.insertRow();
+                row.insertCell(0).textContent = driver.driverID;
+                row.insertCell(1).textContent = driver.carPlateNumber;
+                row.insertCell(2).textContent = driver.overspeed_count;
+                row.insertCell(3).textContent = driver.fatigue_count;
+                row.insertCell(4).textContent = driver.total_overspeed_sec;
+                row.insertCell(5).textContent = driver.total_neutral_slide_sec;
+
+                const option = document.createElement('option');
+                option.value = driver.driverID;
+                option.textContent = `${driver.driverID} (${driver.carPlateNumber})`;
+                select.appendChild(option);
+            });
+
+            if (drivers.length > 0) {
+                document.getElementById('loading-msg').style.display = 'none';
+                currentDriver = drivers[0].driverID;
+                await loadDates(currentDriver);
+            } else {
+                throw new Error('没有司机数据');
+            }
+        } catch (err) {
+            document.getElementById('loading-msg').style.display = 'none';
+            document.getElementById('error-msg').textContent = '加载失败：' + err.message;
+            console.error(err);
+        }
+    }
+
+    // 加载司机有记录的日期
+    async function loadDates(driverId) {
+        try {
+            const res = await fetch(`${API_BASE}/api/driver_dates/${driverId}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const dates = await res.json();
+            const dateSelect = document.getElementById('date-select');
+            dateSelect.innerHTML = '';
+            dates.forEach(d => {
+                const option = document.createElement('option');
+                option.value = d;
+                // 只显示月日，如 "01-02"
+                const displayDate = d.slice(5);
+                option.textContent = displayDate;
+                dateSelect.appendChild(option);
+            });
+            if (dates.length > 0) {
+                currentDate = dates[0];
+                dateSelect.value = currentDate;
+                await loadPage(1);
+                startAutoRefresh();
+            } else {
+                throw new Error('该司机没有数据');
+            }
+        } catch (err) {
+            console.error('加载日期失败', err);
+            document.getElementById('error-msg').textContent = '加载日期失败：' + err.message;
+        }
+    }
+
+    // 加载指定页的数据
+    async function loadPage(page) {
+        if (!currentDriver || !currentDate) return;
+        const url = `${API_BASE}/api/speed/${currentDriver}?page=${page}&page_size=${pageSize}&date=${currentDate}`;
+        try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            currentRecords = data.records;
+            totalRecords = data.total;
+            totalPages = Math.ceil(totalRecords / pageSize);
+            currentPage = data.page;
+
+            // 更新分页显示
+            document.getElementById('current-page').textContent = currentPage;
+            document.getElementById('total-pages').textContent = totalPages;
+            document.getElementById('total-records').textContent = totalRecords;
+            document.getElementById('goto-page').max = totalPages;
+
+            // 停止高亮，重新开始
+            stopHighlightMoving();
+            startHighlightMoving();
+
+            // 超速警告
+            const now = Date.now();
+            if (currentRecords.some(r => r.is_overspeed) && (now - lastAlertTime > 5000)) {
+                const alertBox = document.getElementById('alert-box');
+                alertBox.style.display = 'block';
+                setTimeout(() => { alertBox.style.display = 'none'; }, 3000);
+                lastAlertTime = now;
+            } else if (!currentRecords.some(r => r.is_overspeed)) {
+                document.getElementById('alert-box').style.display = 'none';
+            }
+        } catch (err) {
+            console.error('加载数据失败', err);
+            document.getElementById('error-msg').textContent = '加载数据失败：' + err.message;
+        }
+    }
+
+    // 下一批数据（用于自动刷新）
+    async function nextBatch() {
+        let nextPage = currentPage + 1;
+        if (nextPage > totalPages) {
+            nextPage = 1;  // 循环到第一页
+        }
+        await loadPage(nextPage);
+    }
+
+    // 跳转到指定页
+    async function gotoPage() {
+        let page = parseInt(document.getElementById('goto-page').value);
+        if (isNaN(page)) return;
+        if (page < 1) page = 1;
+        if (page > totalPages) page = totalPages;
+        await loadPage(page);
+    }
+
+    // 开始自动刷新（每30秒加载下一页）
+    function startAutoRefresh() {
+        if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+        if (countdownTimer) clearInterval(countdownTimer);
+        autoRefreshTimer = setInterval(() => {
+            nextBatch();
+            startCountdown(30);
+        }, 30000);
+        startCountdown(30);
+    }
+
+    // 停止自动刷新
+    function stopAutoRefresh() {
+        if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+        if (countdownTimer) clearInterval(countdownTimer);
+        autoRefreshTimer = null;
+        countdownTimer = null;
+    }
+
+    // 倒计时进度条
+    function startCountdown(seconds) {
+        if (countdownTimer) clearInterval(countdownTimer);
+        let remaining = seconds;
+        const countdownSpan = document.getElementById('countdown');
+        const progressFill = document.getElementById('progress-fill');
+        const update = () => {
+            countdownSpan.textContent = remaining;
+            const percent = (remaining / seconds) * 100;
+            progressFill.style.width = percent + '%';
+            if (remaining <= 0) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+            } else {
+                remaining--;
+            }
+        };
+        update();
+        countdownTimer = setInterval(update, 1000);
+    }
+
+    // 高亮移动
+    function startHighlightMoving() {
+        if (highlightTimer) clearInterval(highlightTimer);
+        if (!currentRecords.length) return;
+        currentHighlightIndex = 0;
+        renderChart(currentRecords, currentHighlightIndex);
+        highlightTimer = setInterval(() => {
+            if (!currentRecords.length) return;
+            currentHighlightIndex = (currentHighlightIndex + 1) % currentRecords.length;
+            renderChart(currentRecords, currentHighlightIndex);
+        }, 1000);
+    }
+
+    function stopHighlightMoving() {
+        if (highlightTimer) {
+            clearInterval(highlightTimer);
+            highlightTimer = null;
+        }
+    }
+
+    // 渲染图表
+    function renderChart(records, highlightIndex = -1) {
+        const times = records.map(r => new Date(r.time).toLocaleString());
+        const speeds = records.map(r => r.speed);
+        const isOverspeedFlags = records.map(r => r.is_overspeed);
+        const pointColors = isOverspeedFlags.map(o => o ? 'red' : 'blue');
+        if (highlightIndex >= 0 && highlightIndex < pointColors.length) {
+            pointColors[highlightIndex] = 'gold';
+        }
+
+        if (!speedChart) {
+            const ctx = document.getElementById('speed-chart').getContext('2d');
+            speedChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: times,
+                    datasets: [{
+                        label: '速度 (km/h)',
+                        data: speeds,
+                        borderColor: 'blue',
+                        fill: false,
+                        pointBackgroundColor: pointColors,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true, title: { display: true, text: '速度 (km/h)' } },
+                        x: { title: { display: true, text: '时间' } }
+                    }
+                }
+            });
+        } else {
+            speedChart.data.labels = times;
+            speedChart.data.datasets[0].data = speeds;
+            speedChart.data.datasets[0].pointBackgroundColor = pointColors;
+            speedChart.update();
+        }
+
+        // 更新当前速度显示
+        if (highlightIndex >= 0 && highlightIndex < records.length) {
+            updateCurrentSpeed(records[highlightIndex].speed, records[highlightIndex].is_overspeed);
+        } else if (records.length > 0) {
+            updateCurrentSpeed(records[records.length-1].speed, records[records.length-1].is_overspeed);
+        }
+    }
+
+    function updateCurrentSpeed(speed, isOverspeed) {
+        const card = document.getElementById('current-speed-card');
+        if (speed === undefined || speed === null) {
+            card.textContent = '当前速度：-- km/h';
+            card.classList.remove('overspeed');
+            return;
+        }
+        card.textContent = `当前速度：${speed} km/h`;
+        if (isOverspeed) {
+            card.classList.add('overspeed');
+        } else {
+            card.classList.remove('overspeed');
+        }
+    }
+
+    // 事件处理
+    async function onDriverChange() {
+        currentDriver = document.getElementById('driver-select').value;
+        await loadDates(currentDriver);
+        // 日期变化后会自动加载第一页
+    }
+
+    async function onDateChange() {
+        currentDate = document.getElementById('date-select').value;
+        await loadPage(1);
+        // 重置自动刷新定时器（因为日期变了，需要重新开始）
+        stopAutoRefresh();
+        startAutoRefresh();
+    }
+
+    document.getElementById('driver-select').addEventListener('change', onDriverChange);
+    document.getElementById('date-select').addEventListener('change', onDateChange);
+    document.getElementById('goto-btn').addEventListener('click', gotoPage);
+
+    window.addEventListener('load', loadSummary);
+</script>
+</body>
+</html>

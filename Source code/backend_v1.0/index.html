@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>驾驶行为监控系统</title>
+    <meta charset="utf-8">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        #chart-container { width: 80%; margin: 20px auto; }
+        select { margin: 10px 0; padding: 5px; }
+        .alert { background-color: #ffcccc; padding: 10px; margin: 10px 0; display: none; }
+        .loading { color: blue; margin: 10px 0; }
+        .error { color: red; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>驾驶行为监控系统</h1>
+
+    <div id="alert-box" class="alert">⚠️ 警告：检测到超速行为！</div>
+    <div id="loading-msg" class="loading">加载数据中...</div>
+    <div id="error-msg" class="error"></div>
+
+    <h2>驾驶员摘要</h2>
+    <table id="summary-table">
+        <thead>
+            <tr><th>驾驶员ID</th><th>车牌号</th><th>超速次数</th><th>疲劳驾驶次数</th><th>超速总时间(秒)</th><th>空挡滑行总时间(秒)</th>
+        </thead>
+        <tbody></tbody>
+    划
+
+    <h2>实时速度监控</h2>
+    <div>
+        <label for="driver-select">选择驾驶员：</label>
+        <select id="driver-select"></select>
+    </div>
+    <div id="chart-container">
+        <canvas id="speed-chart"></canvas>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000';
+
+        let speedChart = null;
+        let updateInterval = null;
+        let lastAlertTime = 0;
+
+        async function loadSummary() {
+            try {
+                const res = await fetch(`${API_BASE}/api/summary`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const drivers = await res.json();
+
+                const tbody = document.querySelector('#summary-table tbody');
+                tbody.innerHTML = '';
+                const select = document.getElementById('driver-select');
+                select.innerHTML = '';
+
+                drivers.forEach(driver => {
+                    const row = tbody.insertRow();
+                    row.insertCell(0).textContent = driver.driverID;               // 使用 driverID
+                    row.insertCell(1).textContent = driver.carPlateNumber;         // 使用 carPlateNumber
+                    row.insertCell(2).textContent = driver.overspeed_count;
+                    row.insertCell(3).textContent = driver.fatigue_count;
+                    row.insertCell(4).textContent = driver.total_overspeed_sec;    // 超速总时间
+                    row.insertCell(5).textContent = driver.total_neutral_slide_sec; // 空挡滑行总时间
+
+                    const option = document.createElement('option');
+                    option.value = driver.driverID;  // 注意 value 使用 driverID
+                    option.textContent = `${driver.driverID} (${driver.carPlateNumber})`;
+                    select.appendChild(option);
+                });
+
+                if (drivers.length > 0) {
+                    document.getElementById('loading-msg').style.display = 'none';
+                    startMonitoring();
+                } else {
+                    throw new Error('没有司机数据');
+                }
+            } catch (err) {
+                document.getElementById('loading-msg').style.display = 'none';
+                document.getElementById('error-msg').textContent = '加载失败：' + err.message;
+                console.error(err);
+            }
+        }
+
+        function startMonitoring() {
+            if (updateInterval) clearInterval(updateInterval);
+            updateSpeedChart();
+            updateInterval = setInterval(updateSpeedChart, 30000);
+        }
+
+        async function updateSpeedChart() {
+            const driverId = document.getElementById('driver-select').value;
+            if (!driverId) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/speed/${driverId}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                const times = data.map(d => new Date(d.time).toLocaleTimeString());
+                const speeds = data.map(d => d.speed);
+                const overspeeds = data.map(d => d.is_overspeed);
+
+                const now = Date.now();
+                if (data.some(d => d.is_overspeed) && (now - lastAlertTime > 5000)) {
+                    const alertBox = document.getElementById('alert-box');
+                    alertBox.style.display = 'block';
+                    setTimeout(() => { alertBox.style.display = 'none'; }, 3000);
+                    lastAlertTime = now;
+                } else if (!data.some(d => d.is_overspeed)) {
+                    document.getElementById('alert-box').style.display = 'none';
+                }
+
+                if (speedChart) {
+                    speedChart.data.labels = times;
+                    speedChart.data.datasets[0].data = speeds;
+                    speedChart.data.datasets[0].pointBackgroundColor = overspeeds.map(o => o ? 'red' : 'blue');
+                    speedChart.update();
+                } else {
+                    const ctx = document.getElementById('speed-chart').getContext('2d');
+                    speedChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: times,
+                            datasets: [{
+                                label: '速度 (km/h)',
+                                data: speeds,
+                                borderColor: 'blue',
+                                fill: false,
+                                pointBackgroundColor: overspeeds.map(o => o ? 'red' : 'blue')
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            scales: {
+                                y: { beginAtZero: true, title: { display: true, text: '速度 (km/h)' } },
+                                x: { title: { display: true, text: '时间' } }
+                            }
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('速度数据加载失败', err);
+                document.getElementById('error-msg').textContent = '速度数据加载失败：' + err.message;
+            }
+        }
+
+        document.getElementById('driver-select').addEventListener('change', () => {
+            updateSpeedChart();
+        });
+
+        window.addEventListener('load', loadSummary);
+    </script>
+</body>
+</html>
