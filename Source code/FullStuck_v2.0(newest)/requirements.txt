@@ -2,3 +2,13 @@ Flask==2.3.3
 Flask-SQLAlchemy==3.0.5
 PyMySQL==1.1.0
 Flask-CORS==4.0.0
+# AI dependencies for Phase 2
+openai>=1.30.0
+langchain>=0.3.0
+langchain-openai>=0.3.0
+vanna[openai,mysql]>=0.4.0
+scikit-learn>=1.5.0
+pandas>=2.0.0
+numpy>=1.26.0
+reportlab>=4.4.0
+python-dotenv>=1.0.0
