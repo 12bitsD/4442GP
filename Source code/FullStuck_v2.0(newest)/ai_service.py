@@ -184,6 +184,15 @@ def nl_to_sql_query(question: str) -> Dict[str, Any]:
     Returns:
         dict with keys: sql (str), results (list of dicts), error (str or None)
     """
+    # Check if API key is configured
+    api_key = os.getenv("VANNA_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return {
+            "sql": None,
+            "results": [],
+            "error": "AI service not configured. Please set OPENAI_API_KEY or VANNA_API_KEY environment variable.",
+        }
+
     try:
         vn = _get_vanna()
         sql = vn.generate_sql(question=question)
