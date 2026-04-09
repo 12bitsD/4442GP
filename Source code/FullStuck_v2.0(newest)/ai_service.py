@@ -204,3 +204,142 @@ def nl_to_sql_query(question: str) -> Dict[str, Any]:
 
     except Exception as e:
         return {"sql": None, "results": [], "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# PDF Report Generation (ReportLab)
+# ---------------------------------------------------------------------------
+
+
+def generate_pdf_report(
+    driver_id: str, summary: Dict[str, Any], anomalies: List[Dict[str, Any]]
+) -> bytes:
+    """Generate a PDF driving behavior report for a driver.
+
+    Args:
+        driver_id: driver identifier string
+        summary: dict with overspeed_count, fatigue_count, total_overspeed_sec,
+                 total_neutral_slide_sec, carPlateNumber
+        anomalies: list of anomaly records from detect_anomalies()
+    Returns:
+        bytes: PDF file content
+    """
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import (
+        SimpleDocTemplate,
+        Table,
+        TableStyle,
+        Paragraph,
+        Spacer,
+    )
+    from reportlab.lib import colors
+    import io
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4, topMargin=0.75 * inch, bottomMargin=0.75 * inch
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "Title", parent=styles["Heading1"], fontSize=18, spaceAfter=12
+    )
+    section_style = ParagraphStyle(
+        "Section", parent=styles["Heading2"], fontSize=13, spaceAfter=8
+    )
+
+    elements = []
+
+    score = compute_driver_score(summary)
+    risk = get_risk_level(score)
+    elements.append(Paragraph("Driver Behavior Analysis Report", title_style))
+    elements.append(
+        Paragraph(
+            f"Driver: {driver_id} | Plate: {summary.get('carPlateNumber', 'N/A')} | Safety Score: {score}/100 ({risk})",
+            styles["Normal"],
+        )
+    )
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # Summary Table
+    elements.append(Paragraph("Behavior Summary", section_style))
+    risk_color = {"LOW": colors.green, "MEDIUM": colors.orange, "HIGH": colors.red}[
+        risk
+    ]
+
+    summary_data = [
+        ["Metric", "Value"],
+        ["Safety Score", f"{score} / 100"],
+        ["Risk Level", risk],
+        ["Overspeed Incidents", str(summary.get("overspeed_count", 0))],
+        ["Fatigue Driving Incidents", str(summary.get("fatigue_count", 0))],
+        ["Total Overspeed Duration", f"{summary.get('total_overspeed_sec', 0)} sec"],
+        [
+            "Total Neutral Slide Duration",
+            f"{summary.get('total_neutral_slide_sec', 0)} sec",
+        ],
+        ["Anomalies Detected", str(len(anomalies))],
+    ]
+
+    summary_table = Table(summary_data, colWidths=[3 * inch, 2 * inch])
+    summary_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.darkblue),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+                ("BACKGROUND", (1, 2), (1, 2), risk_color),
+                ("TEXTCOLOR", (1, 2), (1, 2), colors.white),
+            ]
+        )
+    )
+    elements.append(summary_table)
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # Anomaly Table
+    if anomalies:
+        elements.append(
+            Paragraph(
+                f"Top Anomalies (showing up to 20 of {len(anomalies)})", section_style
+            )
+        )
+        anomaly_data = [["Timestamp", "Speed (km/h)", "Overspeed", "Anomaly Score"]]
+        for a in anomalies[:20]:
+            anomaly_data.append(
+                [
+                    str(a.get("time", ""))[:19],
+                    f"{a.get('speed', 0):.1f}",
+                    "Yes" if a.get("is_overspeed") else "No",
+                    f"{a.get('anomaly_score', 0):.4f}",
+                ]
+            )
+        anomaly_table = Table(
+            anomaly_data, colWidths=[2.2 * inch, 1.2 * inch, 1 * inch, 1.3 * inch]
+        )
+        anomaly_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.darkred),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    (
+                        "ROWBACKGROUNDS",
+                        (0, 1),
+                        (-1, -1),
+                        [colors.white, colors.lightyellow],
+                    ),
+                ]
+            )
+        )
+        elements.append(anomaly_table)
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()

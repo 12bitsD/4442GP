@@ -213,6 +213,49 @@ def ai_natural_language_query():
     return jsonify(result), status
 
 
+@app.route("/api/ai/report/<driver_id>", methods=["GET"])
+def get_driver_report(driver_id):
+    """GET /api/ai/report/<driver_id> - Download PDF report."""
+    driver = DriverSummary.query.get(driver_id)
+    if not driver:
+        return jsonify({"error": "Driver not found"}), 404
+
+    summary = {
+        "overspeed_count": driver.overspeed_count,
+        "fatigue_count": driver.fatigue_count,
+        "total_overspeed_sec": driver.total_overspeed_sec,
+        "total_neutral_slide_sec": driver.total_neutral_slide_sec,
+        "carPlateNumber": driver.carPlateNumber,
+    }
+
+    records_db = (
+        RawDrivingRecord.query.filter_by(driverID=driver_id)
+        .order_by(RawDrivingRecord.Time)
+        .all()
+    )
+    records = [
+        {
+            "time": r.Time.isoformat(),
+            "speed": r.Speed,
+            "is_overspeed": bool(r.isOverspeed),
+        }
+        for r in records_db
+    ]
+    anomalies = detect_anomalies(records)
+
+    from ai_service import generate_pdf_report
+    import io
+
+    pdf_bytes = generate_pdf_report(driver_id, summary, anomalies)
+
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"driver_{driver_id}_report.pdf",
+    )
+
+
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
