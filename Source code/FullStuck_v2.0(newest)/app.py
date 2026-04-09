@@ -195,6 +195,24 @@ def get_anomalies(driver_id):
     )
 
 
+@app.route("/api/ai/query", methods=["POST"])
+def ai_natural_language_query():
+    """POST /api/ai/query - Natural language to SQL query."""
+    data = request.get_json()
+    if not data or "question" not in data:
+        return jsonify({"error": "Missing field: question"}), 400
+
+    question = data["question"].strip()
+    if not question:
+        return jsonify({"error": "Question cannot be empty"}), 400
+
+    from ai_service import nl_to_sql_query
+
+    result = nl_to_sql_query(question)
+    status = 500 if result["error"] else 200
+    return jsonify(result), status
+
+
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
