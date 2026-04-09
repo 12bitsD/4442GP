@@ -43,6 +43,20 @@
         button { cursor: pointer; }
         .pagination { margin: 10px 0; display: flex; gap: 10px; align-items: center; }
         .pagination input { width: 60px; text-align: center; }
+        /* AI Panel Styles */
+        .ai-panel { margin: 24px 0; padding: 20px; background: #f0f4ff; border-radius: 8px; border-left: 4px solid #3b5bdb; }
+        .ai-panel h2 { margin-top: 0; color: #1e3a8a; }
+        .score-badge { display: inline-block; padding: 8px 18px; border-radius: 20px; font-size: 22px; font-weight: bold; margin-right: 10px; }
+        .score-badge.LOW { background: #d3f9d8; color: #1e7e34; }
+        .score-badge.MEDIUM { background: #fff3cd; color: #856404; }
+        .score-badge.HIGH { background: #f8d7da; color: #721c24; }
+        .ai-scores-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        .ai-scores-table th, .ai-scores-table td { border: 1px solid #ddd; padding: 6px 10px; text-align: center; }
+        .ai-scores-table th { background: #3b5bdb; color: white; }
+        .nl-query-box { display: flex; gap: 8px; margin: 12px 0; }
+        .nl-query-box input { flex: 1; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        .nl-query-result { background: white; border-radius: 6px; padding: 12px; margin-top: 10px; font-family: monospace; font-size: 13px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; }
+        .anomaly-badge { background: #ffecb3; color: #e65100; padding: 3px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -87,6 +101,38 @@
             <tr><th>驾驶员ID</th><th>车牌号</th><th>超速次数</th><th>疲劳驾驶次数</th><th>超速总时间(秒)</th><th>空挡滑行总时间(秒)</th>
         </thead>
         <tbody></tbody>
+    </table>
+
+    <!-- AI Analysis Panel -->
+    <div class="ai-panel">
+        <h2>🤖 AI Safety Analysis</h2>
+
+        <h3>Driver Safety Scores</h3>
+        <div id="ai-loading" style="color:#666; font-size:14px;">Loading AI scores...</div>
+        <table class="ai-scores-table" id="ai-scores-table" style="display:none;">
+            <thead>
+                <tr>
+                    <th>Driver ID</th>
+                    <th>Plate</th>
+                    <th>Safety Score</th>
+                    <th>Risk Level</th>
+                    <th>Report</th>
+                </tr>
+            </thead>
+            <tbody id="ai-scores-tbody"></tbody>
+        </table>
+
+        <h3>Anomaly Detection — <span id="anomaly-driver-label">Select a driver above</span></h3>
+        <div id="anomaly-result" style="color:#888; font-size:14px;">Select a driver to run anomaly detection.</div>
+
+        <h3>💬 Ask in Natural Language</h3>
+        <div class="nl-query-box">
+            <input type="text" id="nl-input" placeholder="e.g. Which driver had the most fatigue events?" />
+            <button id="nl-submit-btn" onclick="submitNLQuery()">Ask AI</button>
+        </div>
+        <div id="nl-sql-display" style="font-size:12px; color:#555; margin-bottom:4px;"></div>
+        <div class="nl-query-result" id="nl-result" style="display:none;"></div>
+    </div>
 </div>
 
 <script>
@@ -376,6 +422,113 @@
     document.getElementById('driver-select').addEventListener('change', onDriverChange);
     document.getElementById('date-select').addEventListener('change', onDateChange);
     document.getElementById('goto-btn').addEventListener('click', gotoPage);
+
+    // ========== AI Panel Logic ==========
+
+    async function loadAIScores() {
+        try {
+            const res = await fetch(`${API_BASE}/api/ai/scores`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const scores = await res.json();
+
+            document.getElementById('ai-loading').style.display = 'none';
+            const table = document.getElementById('ai-scores-table');
+            table.style.display = 'table';
+            const tbody = document.getElementById('ai-scores-tbody');
+            tbody.innerHTML = '';
+
+            scores.forEach(d => {
+                const tr = document.createElement('tr');
+                const riskColor = { LOW: '#d3f9d8', MEDIUM: '#fff3cd', HIGH: '#f8d7da' }[d.risk_level] || '#fff';
+                tr.innerHTML = `
+                    <td>${d.driverID}</td>
+                    <td>${d.carPlateNumber}</td>
+                    <td><span class="score-badge ${d.risk_level}">${d.score}</span></td>
+                    <td style="background:${riskColor}; font-weight:bold;">${d.risk_level}</td>
+                    <td><a href="${API_BASE}/api/ai/report/${d.driverID}" target="_blank">📄 PDF</a></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (err) {
+            document.getElementById('ai-loading').textContent = 'AI scores unavailable: ' + err.message;
+            console.error('loadAIScores error:', err);
+        }
+    }
+
+    async function loadAnomalies(driverId) {
+        document.getElementById('anomaly-driver-label').textContent = driverId;
+        document.getElementById('anomaly-result').textContent = 'Detecting anomalies...';
+        try {
+            const res = await fetch(`${API_BASE}/api/ai/anomalies/${driverId}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            if (data.anomalies.length === 0) {
+                document.getElementById('anomaly-result').textContent = '✅ No anomalies detected for this driver.';
+            } else {
+                let html = `<span class="anomaly-badge">⚠️ ${data.total} anomalies detected</span><br><br>`;
+                html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+                html += '<tr style="background:#eee;"><th>Time</th><th>Speed</th><th>Overspeed</th><th>Score</th></tr>';
+                data.anomalies.slice(0, 10).forEach(a => {
+                    html += `<tr>
+                        <td>${a.time.slice(0, 19)}</td>
+                        <td style="color:${a.is_overspeed ? 'red' : 'black'}">${a.speed.toFixed(1)} km/h</td>
+                        <td>${a.is_overspeed ? '⚠️ Yes' : 'No'}</td>
+                        <td>${a.anomaly_score.toFixed(4)}</td>
+                    </tr>`;
+                });
+                html += '</table>';
+                document.getElementById('anomaly-result').innerHTML = html;
+            }
+        } catch (err) {
+            document.getElementById('anomaly-result').textContent = 'Anomaly detection failed: ' + err.message;
+        }
+    }
+
+    async function submitNLQuery() {
+        const question = document.getElementById('nl-input').value.trim();
+        if (!question) return;
+
+        const btn = document.getElementById('nl-submit-btn');
+        btn.textContent = 'Thinking...';
+        btn.disabled = true;
+
+        document.getElementById('nl-result').style.display = 'block';
+        document.getElementById('nl-result').textContent = '⏳ Generating SQL and querying...';
+        document.getElementById('nl-sql-display').textContent = '';
+
+        try {
+            const res = await fetch(`${API_BASE}/api/ai/query`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question })
+            });
+            const data = await res.json();
+
+            if (data.error) {
+                document.getElementById('nl-result').textContent = '❌ Error: ' + data.error;
+            } else {
+                document.getElementById('nl-sql-display').textContent = '🔍 SQL: ' + data.sql;
+                document.getElementById('nl-result').textContent = JSON.stringify(data.results, null, 2);
+            }
+        } catch (err) {
+            document.getElementById('nl-result').textContent = 'Query failed: ' + err.message;
+        } finally {
+            btn.textContent = 'Ask AI';
+            btn.disabled = false;
+        }
+    }
+
+    // Hook into existing driver select change
+    const _origDriverChange = onDriverChange;
+    async function onDriverChange() {
+        await _origDriverChange();
+        const driverId = document.getElementById('driver-select').value;
+        if (driverId) loadAnomalies(driverId);
+    }
+
+    // Load AI scores on page load
+    window.addEventListener('load', loadAIScores);
 
     window.addEventListener('load', loadSummary);
 </script>
