@@ -71,6 +71,40 @@ driver_behavior_summary:
 | `/api/speed/<driver_id>` | GET | 获取驾驶员速度记录 | `page`, `page_size`, `date` |
 | `/api/driver_dates/<driver_id>` | GET | 获取驾驶员有记录的日期列表 | - |
 | `/api/health` | GET | 健康检查 | - |
+| `/api/ai/score/<driver_id>` | GET | AI 安全评分 (0-100) | - |
+| `/api/ai/scores` | GET | 所有驾驶员 AI 评分 | - |
+| `/api/ai/anomalies/<driver_id>` | GET | 异常驾驶行为检测 | `date` (可选) |
+| `/api/ai/query` | POST | 自然语言 SQL 查询 | `question` (正文) |
+| `/api/ai/report/<driver_id>` | GET | PDF 报告下载 | - |
+
+---
+
+## AI 服务配置
+
+### 功能说明
+
+| 功能 | 实现方式 | 是否需要 API Key |
+|------|----------|-----------------|
+| **驾驶行为评分** | 本地加权公式 | ❌ 不需要 |
+| **异常检测** | sklearn IsolationForest | ❌ 不需要 |
+| **PDF 报告生成** | ReportLab 本地生成 | ❌ 不需要 |
+| **自然语言查询** | Vanna.ai → OpenAI API | ✅ **需要配置** |
+
+### 配置环境变量
+
+```bash
+# 必需：用于自然语言查询功能
+export OPENAI_API_KEY=sk-your-key-here
+
+# 可选：使用 Vanna.ai 自有模型
+export VANNA_API_KEY=your-vanna-api-key
+export VANNA_MODEL=your-model-name
+```
+
+### 未配置 API Key 时的行为
+
+- **评分 / 异常检测 / PDF 报告**：✅ 完全可用
+- **自然语言查询**：返回提示信息 `"AI service not configured. Please set OPENAI_API_KEY..."`
 
 ---
 
@@ -170,29 +204,29 @@ Presentation&Demostration.pptx  # 演示文稿
 - 使用 Flask-JWT-Extended 处理认证
 - 中间件自动过滤当前租户数据
 
-### Phase 2: AI 数据分析 (AI-Powered Analytics)
+### Phase 2: AI 数据分析 (AI-Powered Analytics) ✅ 已完成
 
 **目标**: 利用 AI 模型深度分析驾驶行为，提供智能洞察
 
 **核心功能**:
-- [ ] 驾驶行为评分模型
+- [x] 驾驶行为评分模型
   - 基于历史数据的驾驶习惯画像
   - 风险等级评估 (低/中/高)
-- [ ] 异常检测
+- [x] 异常检测
   - 聚类分析识别异常驾驶模式
   - 时序预测预警潜在危险
-- [ ] 自然语言查询
+- [x] 自然语言查询
   - 用户可用中文/英文直接提问
   - AI 自动生成 SQL 查询并返回结果
-- [ ] 智能报告生成
+- [x] 智能报告生成
   - 自动生成周/月度驾驶行为分析报告
   - 可视化图表 + 文字解读
 
 **技术方案**:
-- 集成 OpenAI/Claude API 或本地 LLM
-- 使用 scikit-learn/pandas 进行数据挖掘
-- 构建驾驶行为特征工程
-- 可选：训练专用驾驶行为评估模型
+- ✅ OpenAI API (可选，用于自然语言查询)
+- ✅ scikit-learn IsolationForest (本地异常检测)
+- ✅ ReportLab (本地 PDF 生成)
+- ✅ Vanna.ai (Text-to-SQL)
 
 ---
 

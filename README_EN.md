@@ -71,6 +71,40 @@ driver_behavior_summary:
 | `/api/speed/<driver_id>` | GET | Get driver speed records | `page`, `page_size`, `date` |
 | `/api/driver_dates/<driver_id>` | GET | Get dates with records for driver | - |
 | `/api/health` | GET | Health check | - |
+| `/api/ai/score/<driver_id>` | GET | AI safety score (0-100) | - |
+| `/api/ai/scores` | GET | All drivers AI scores | - |
+| `/api/ai/anomalies/<driver_id>` | GET | Anomaly detection | `date` (optional) |
+| `/api/ai/query` | POST | Natural language SQL query | `question` (body) |
+| `/api/ai/report/<driver_id>` | GET | PDF report download | - |
+
+---
+
+## AI Services Configuration
+
+### Feature Overview
+
+| Feature | Implementation | Requires API Key |
+|---------|---------------|------------------|
+| **Driver Scoring** | Local weighted formula | ❌ No |
+| **Anomaly Detection** | sklearn IsolationForest | ❌ No |
+| **PDF Report** | ReportLab local generation | ❌ No |
+| **Natural Language Query** | Vanna.ai → OpenAI API | ✅ **Required** |
+
+### Environment Variables
+
+```bash
+# Required for natural language query feature
+export OPENAI_API_KEY=sk-your-key-here
+
+# Optional: use Vanna.ai custom model
+export VANNA_API_KEY=your-vanna-api-key
+export VANNA_MODEL=your-model-name
+```
+
+### Behavior Without API Key
+
+- **Scoring / Anomaly Detection / PDF Reports**: ✅ Fully functional
+- **Natural Language Query**: Returns message `"AI service not configured. Please set OPENAI_API_KEY..."`
 
 ---
 
@@ -170,29 +204,29 @@ This project uses the COMP4442 course driving behavior dataset, containing GPS t
 - Use Flask-JWT-Extended for authentication
 - Middleware to auto-filter current tenant data
 
-### Phase 2: AI-Powered Analytics
+### Phase 2: AI-Powered Analytics ✅ Completed
 
 **Goal**: Leverage AI models to deeply analyze driving behavior and provide intelligent insights
 
 **Core Features**:
-- [ ] Driving behavior scoring model
+- [x] Driving behavior scoring model
   - Historical data-based driving habit profiling
   - Risk level assessment (Low/Medium/High)
-- [ ] Anomaly detection
+- [x] Anomaly detection
   - Cluster analysis to identify abnormal driving patterns
   - Time-series prediction for early warning of potential dangers
-- [ ] Natural language queries
+- [x] Natural language queries
   - Users can ask questions in Chinese/English
   - AI auto-generates SQL queries and returns results
-- [ ] Intelligent report generation
+- [x] Intelligent report generation
   - Auto-generate weekly/monthly driving behavior analysis reports
   - Visual charts + text interpretation
 
 **Technical Approach**:
-- Integrate OpenAI/Claude API or local LLM
-- Use scikit-learn/pandas for data mining
-- Build driving behavior feature engineering
-- Optional: Train dedicated driving behavior evaluation model
+- ✅ OpenAI API (optional, for natural language queries)
+- ✅ scikit-learn IsolationForest (local anomaly detection)
+- ✅ ReportLab (local PDF generation)
+- ✅ Vanna.ai (Text-to-SQL)
 
 ---
 
