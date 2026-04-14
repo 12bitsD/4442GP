@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>驾驶行为监控系统</title>
+    <title>Driving Behavior Monitoring System</title>
     <meta charset="utf-8">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -43,50 +43,96 @@
         button { cursor: pointer; }
         .pagination { margin: 10px 0; display: flex; gap: 10px; align-items: center; }
         .pagination input { width: 60px; text-align: center; }
+        /* AI Panel Styles */
+        .ai-panel { margin: 24px 0; padding: 20px; background: #f0f4ff; border-radius: 8px; border-left: 4px solid #3b5bdb; }
+        .ai-panel h2 { margin-top: 0; color: #1e3a8a; }
+        .score-badge { display: inline-block; padding: 8px 18px; border-radius: 20px; font-size: 22px; font-weight: bold; margin-right: 10px; }
+        .score-badge.LOW { background: #d3f9d8; color: #1e7e34; }
+        .score-badge.MEDIUM { background: #fff3cd; color: #856404; }
+        .score-badge.HIGH { background: #f8d7da; color: #721c24; }
+        .ai-scores-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        .ai-scores-table th, .ai-scores-table td { border: 1px solid #ddd; padding: 6px 10px; text-align: center; }
+        .ai-scores-table th { background: #3b5bdb; color: white; }
+        .nl-query-box { display: flex; gap: 8px; margin: 12px 0; }
+        .nl-query-box input { flex: 1; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        .nl-query-result { background: white; border-radius: 6px; padding: 12px; margin-top: 10px; font-family: monospace; font-size: 13px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; }
+        .anomaly-badge { background: #ffecb3; color: #e65100; padding: 3px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>驾驶行为监控系统</h1>
+    <h1>Driving Behavior Monitoring System</h1>
 
-    <div id="alert-box" class="alert">⚠️ 警告：检测到超速行为！</div>
-    <div id="loading-msg" class="loading">加载数据中...</div>
+    <div id="alert-box" class="alert">⚠️ Warning: Speeding has been detected!</div>
+    <div id="loading-msg" class="loading">Loading data...</div>
     <div id="error-msg" class="error"></div>
 
-    <!-- 实时速度监控 -->
-    <h2>实时速度监控</h2>
+    <!-- Real-time Speed Monitoring -->
+    <h2>Real-time Speed Monitoring</h2>
     <div>
-        <label for="driver-select">选择驾驶员：</label>
+        <label for="driver-select">Select Driver:</label>
         <select id="driver-select"></select>
-        <label for="date-select">选择日期：</label>
+        <label for="date-select">Select Date:</label>
         <select id="date-select"></select>
     </div>
     <div class="speed-card" id="current-speed-card">
-        当前速度：-- km/h
+        Current Speed: -- km/h
     </div>
     <div class="refresh-info" id="refresh-info">
-        下次刷新：<span id="countdown">30</span> 秒
+        Next Refresh: <span id="countdown">30</span> seconds
         <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
     </div>
     <div id="chart-container">
         <canvas id="speed-chart"></canvas>
     </div>
 
-    <!-- 分页控件 -->
+    <!-- Pagination Controls -->
     <div class="pagination" id="pagination">
-        <span>第 <span id="current-page">1</span> 页 / 共 <span id="total-pages">0</span> 页</span>
-        <span>(共 <span id="total-records">0</span> 条记录)</span>
-        <input type="number" id="goto-page" min="1" placeholder="页码">
-        <button id="goto-btn">跳转</button>
+        <span>Page <span id="current-page">1</span> of <span id="total-pages">0</span></span>
+        <span>(Total <span id="total-records">0</span> records)</span>
+        <input type="number" id="goto-page" min="1" placeholder="Page">
+        <button id="goto-btn">Go</button>
     </div>
 
-    <!-- 驾驶员摘要表格 -->
-    <h2>驾驶员摘要</h2>
+    <!-- Driver Summary Table -->
+    <h2>Driver Summary</h2>
     <table id="summary-table">
         <thead>
-            <tr><th>驾驶员ID</th><th>车牌号</th><th>超速次数</th><th>疲劳驾驶次数</th><th>超速总时间(秒)</th><th>空挡滑行总时间(秒)</th>
+            <tr><th>Driver ID</th><th>Plate Number</th><th>Overspeed Count</th><th>Fatigue Driving Count</th><th>Total Overspeed Time (sec)</th><th>Total Neutral Slide Time (sec)</th>
         </thead>
         <tbody></tbody>
+    </table>
+
+    <!-- AI Analysis Panel -->
+    <div class="ai-panel">
+        <h2>🤖 AI Safety Analysis</h2>
+
+        <h3>Driver Safety Scores</h3>
+        <div id="ai-loading" style="color:#666; font-size:14px;">Loading AI scores...</div>
+        <table class="ai-scores-table" id="ai-scores-table" style="display:none;">
+            <thead>
+                <tr>
+                    <th>Driver ID</th>
+                    <th>Plate</th>
+                    <th>Safety Score</th>
+                    <th>Risk Level</th>
+                    <th>Report</th>
+                </tr>
+            </thead>
+            <tbody id="ai-scores-tbody"></tbody>
+        </table>
+
+        <h3>Anomaly Detection — <span id="anomaly-driver-label">Select a driver above</span></h3>
+        <div id="anomaly-result" style="color:#888; font-size:14px;">Select a driver to run anomaly detection.</div>
+
+        <h3>💬 Ask in Natural Language</h3>
+        <div class="nl-query-box">
+            <input type="text" id="nl-input" placeholder="e.g. Which driver had the most fatigue events?" />
+            <button id="nl-submit-btn" onclick="submitNLQuery()">Ask AI</button>
+        </div>
+        <div id="nl-sql-display" style="font-size:12px; color:#555; margin-bottom:4px;"></div>
+        <div class="nl-query-result" id="nl-result" style="display:none;"></div>
+    </div>
 </div>
 
 <script>
@@ -98,7 +144,7 @@
     let lastAlertTime = 0;
     let currentRecords = [];
     let currentHighlightIndex = 0;
-    let isRealtimeMode = true;  // 总是实时模式，但现在是分页自动前进
+    let isRealtimeMode = true;  // It was always in real-time mode, but now it moves forward automatically in pagination
     let currentDriver = null;
     let currentDate = null;
     let currentPage = 1;
@@ -106,7 +152,7 @@
     let totalRecords = 0;
     let pageSize = 30;
 
-    // 获取司机摘要
+    // Get the driver summary
     async function loadSummary() {
         try {
             const res = await fetch(`${API_BASE}/api/summary`);
@@ -138,16 +184,16 @@
                 currentDriver = drivers[0].driverID;
                 await loadDates(currentDriver);
             } else {
-                throw new Error('没有司机数据');
+                throw new Error('There is no driver data available');
             }
         } catch (err) {
             document.getElementById('loading-msg').style.display = 'none';
-            document.getElementById('error-msg').textContent = '加载失败：' + err.message;
+            document.getElementById('error-msg').textContent = 'Failed to load data: ' + err.message;
             console.error(err);
         }
     }
 
-    // 加载司机有记录的日期
+    // Get the dates when the driver has records
     async function loadDates(driverId) {
         try {
             const res = await fetch(`${API_BASE}/api/driver_dates/${driverId}`);
@@ -158,7 +204,7 @@
             dates.forEach(d => {
                 const option = document.createElement('option');
                 option.value = d;
-                // 只显示月日，如 "01-02"
+                // Only display the month and day, such as "01-02"
                 const displayDate = d.slice(5);
                 option.textContent = displayDate;
                 dateSelect.appendChild(option);
@@ -169,15 +215,15 @@
                 await loadPage(1);
                 startAutoRefresh();
             } else {
-                throw new Error('该司机没有数据');
+                throw new Error('There is no data available for this driver');
             }
         } catch (err) {
-            console.error('加载日期失败', err);
-            document.getElementById('error-msg').textContent = '加载日期失败：' + err.message;
+            console.error('Failed to load date', err);
+            document.getElementById('error-msg').textContent = 'Failed to load date: ' + err.message;
         }
     }
 
-    // 加载指定页的数据
+    // Load the data of the specified page
     async function loadPage(page) {
         if (!currentDriver || !currentDate) return;
         const url = `${API_BASE}/api/speed/${currentDriver}?page=${page}&page_size=${pageSize}&date=${currentDate}`;
@@ -190,17 +236,17 @@
             totalPages = Math.ceil(totalRecords / pageSize);
             currentPage = data.page;
 
-            // 更新分页显示
+            // Update pagination display
             document.getElementById('current-page').textContent = currentPage;
             document.getElementById('total-pages').textContent = totalPages;
             document.getElementById('total-records').textContent = totalRecords;
             document.getElementById('goto-page').max = totalPages;
 
-            // 停止高亮，重新开始
+            // Stop highlighting and start over
             stopHighlightMoving();
             startHighlightMoving();
 
-            // 超速警告
+            // Overspeed warning
             const now = Date.now();
             if (currentRecords.some(r => r.is_overspeed) && (now - lastAlertTime > 5000)) {
                 const alertBox = document.getElementById('alert-box');
@@ -211,21 +257,21 @@
                 document.getElementById('alert-box').style.display = 'none';
             }
         } catch (err) {
-            console.error('加载数据失败', err);
-            document.getElementById('error-msg').textContent = '加载数据失败：' + err.message;
+            console.error('Failed to load data', err);
+            document.getElementById('error-msg').textContent = 'Failed to load data: ' + err.message;
         }
     }
 
-    // 下一批数据（用于自动刷新）
+    // The next batch of data (for automatic refreshing)
     async function nextBatch() {
         let nextPage = currentPage + 1;
         if (nextPage > totalPages) {
-            nextPage = 1;  // 循环到第一页
+            nextPage = 1;  // Loop to the first page
         }
         await loadPage(nextPage);
     }
 
-    // 跳转到指定页
+    // Jump to the specified page
     async function gotoPage() {
         let page = parseInt(document.getElementById('goto-page').value);
         if (isNaN(page)) return;
@@ -234,7 +280,7 @@
         await loadPage(page);
     }
 
-    // 开始自动刷新（每30秒加载下一页）
+    // Start automatic refresh (load the next page every 30 seconds)
     function startAutoRefresh() {
         if (autoRefreshTimer) clearInterval(autoRefreshTimer);
         if (countdownTimer) clearInterval(countdownTimer);
@@ -245,7 +291,7 @@
         startCountdown(30);
     }
 
-    // 停止自动刷新
+    // Stop automatic refreshing
     function stopAutoRefresh() {
         if (autoRefreshTimer) clearInterval(autoRefreshTimer);
         if (countdownTimer) clearInterval(countdownTimer);
@@ -253,7 +299,7 @@
         countdownTimer = null;
     }
 
-    // 倒计时进度条
+    // Countdown progress bar
     function startCountdown(seconds) {
         if (countdownTimer) clearInterval(countdownTimer);
         let remaining = seconds;
@@ -274,7 +320,7 @@
         countdownTimer = setInterval(update, 1000);
     }
 
-    // 高亮移动
+    // Highlight movement
     function startHighlightMoving() {
         if (highlightTimer) clearInterval(highlightTimer);
         if (!currentRecords.length) return;
@@ -294,9 +340,11 @@
         }
     }
 
-    // 渲染图表
+    // render the chart
     function renderChart(records, highlightIndex = -1) {
-        const times = records.map(r => new Date(r.time).toLocaleString());
+        const times = records.map(r => {
+            return new Date(r.time).toLocaleString('en-US', { hour12: true });
+        });
         const speeds = records.map(r => r.speed);
         const isOverspeedFlags = records.map(r => r.is_overspeed);
         const pointColors = isOverspeedFlags.map(o => o ? 'red' : 'blue');
@@ -311,7 +359,7 @@
                 data: {
                     labels: times,
                     datasets: [{
-                        label: '速度 (km/h)',
+                        label: 'speed (km/h)',
                         data: speeds,
                         borderColor: 'blue',
                         fill: false,
@@ -323,8 +371,8 @@
                 options: {
                     responsive: true,
                     scales: {
-                        y: { beginAtZero: true, title: { display: true, text: '速度 (km/h)' } },
-                        x: { title: { display: true, text: '时间' } }
+                        y: { beginAtZero: true, title: { display: true, text: 'Speed (km/h)' } },
+                        x: { title: { display: true, text: 'Time' } }
                     }
                 }
             });
@@ -335,7 +383,7 @@
             speedChart.update();
         }
 
-        // 更新当前速度显示
+        // Update the current speed display
         if (highlightIndex >= 0 && highlightIndex < records.length) {
             updateCurrentSpeed(records[highlightIndex].speed, records[highlightIndex].is_overspeed);
         } else if (records.length > 0) {
@@ -346,11 +394,11 @@
     function updateCurrentSpeed(speed, isOverspeed) {
         const card = document.getElementById('current-speed-card');
         if (speed === undefined || speed === null) {
-            card.textContent = '当前速度：-- km/h';
+            card.textContent = 'Current Speed: -- km/h';
             card.classList.remove('overspeed');
             return;
         }
-        card.textContent = `当前速度：${speed} km/h`;
+        card.textContent = `Current Speed: ${speed} km/h`;
         if (isOverspeed) {
             card.classList.add('overspeed');
         } else {
@@ -358,17 +406,17 @@
         }
     }
 
-    // 事件处理
+    // Event handling
     async function onDriverChange() {
         currentDriver = document.getElementById('driver-select').value;
         await loadDates(currentDriver);
-        // 日期变化后会自动加载第一页
+        // The first page will be automatically loaded after the date changes
     }
 
     async function onDateChange() {
         currentDate = document.getElementById('date-select').value;
         await loadPage(1);
-        // 重置自动刷新定时器（因为日期变了，需要重新开始）
+        // Reset the auto-refresh timer (as the date has changed, it needs to be restarted)
         stopAutoRefresh();
         startAutoRefresh();
     }
@@ -376,6 +424,113 @@
     document.getElementById('driver-select').addEventListener('change', onDriverChange);
     document.getElementById('date-select').addEventListener('change', onDateChange);
     document.getElementById('goto-btn').addEventListener('click', gotoPage);
+
+    // ========== AI Panel Logic ==========
+
+    async function loadAIScores() {
+        try {
+            const res = await fetch(`${API_BASE}/api/ai/scores`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const scores = await res.json();
+
+            document.getElementById('ai-loading').style.display = 'none';
+            const table = document.getElementById('ai-scores-table');
+            table.style.display = 'table';
+            const tbody = document.getElementById('ai-scores-tbody');
+            tbody.innerHTML = '';
+
+            scores.forEach(d => {
+                const tr = document.createElement('tr');
+                const riskColor = { LOW: '#d3f9d8', MEDIUM: '#fff3cd', HIGH: '#f8d7da' }[d.risk_level] || '#fff';
+                tr.innerHTML = `
+                    <td>${d.driverID}</td>
+                    <td>${d.carPlateNumber}</td>
+                    <td><span class="score-badge ${d.risk_level}">${d.score}</span></td>
+                    <td style="background:${riskColor}; font-weight:bold;">${d.risk_level}</td>
+                    <td><a href="${API_BASE}/api/ai/report/${d.driverID}" target="_blank">📄 PDF</a></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (err) {
+            document.getElementById('ai-loading').textContent = 'AI scores unavailable: ' + err.message;
+            console.error('loadAIScores error:', err);
+        }
+    }
+
+    async function loadAnomalies(driverId) {
+        document.getElementById('anomaly-driver-label').textContent = driverId;
+        document.getElementById('anomaly-result').textContent = 'Detecting anomalies...';
+        try {
+            const res = await fetch(`${API_BASE}/api/ai/anomalies/${driverId}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            if (data.anomalies.length === 0) {
+                document.getElementById('anomaly-result').textContent = '✅ No anomalies detected for this driver.';
+            } else {
+                let html = `<span class="anomaly-badge">⚠️ ${data.total} anomalies detected</span><br><br>`;
+                html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+                html += '<tr style="background:#eee;"><th>Time</th><th>Speed</th><th>Overspeed</th><th>Score</th></tr>';
+                data.anomalies.slice(0, 10).forEach(a => {
+                    html += `<tr>
+                        <td>${a.time.slice(0, 19)}</td>
+                        <td style="color:${a.is_overspeed ? 'red' : 'black'}">${a.speed.toFixed(1)} km/h</td>
+                        <td>${a.is_overspeed ? '⚠️ Yes' : 'No'}</td>
+                        <td>${a.anomaly_score.toFixed(4)}</td>
+                    </tr>`;
+                });
+                html += '</table>';
+                document.getElementById('anomaly-result').innerHTML = html;
+            }
+        } catch (err) {
+            document.getElementById('anomaly-result').textContent = 'Anomaly detection failed: ' + err.message;
+        }
+    }
+
+    async function submitNLQuery() {
+        const question = document.getElementById('nl-input').value.trim();
+        if (!question) return;
+
+        const btn = document.getElementById('nl-submit-btn');
+        btn.textContent = 'Thinking...';
+        btn.disabled = true;
+
+        document.getElementById('nl-result').style.display = 'block';
+        document.getElementById('nl-result').textContent = '⏳ Generating SQL and querying...';
+        document.getElementById('nl-sql-display').textContent = '';
+
+        try {
+            const res = await fetch(`${API_BASE}/api/ai/query`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question })
+            });
+            const data = await res.json();
+
+            if (data.error) {
+                document.getElementById('nl-result').textContent = '❌ Error: ' + data.error;
+            } else {
+                document.getElementById('nl-sql-display').textContent = '🔍 SQL: ' + data.sql;
+                document.getElementById('nl-result').textContent = JSON.stringify(data.results, null, 2);
+            }
+        } catch (err) {
+            document.getElementById('nl-result').textContent = 'Query failed: ' + err.message;
+        } finally {
+            btn.textContent = 'Ask AI';
+            btn.disabled = false;
+        }
+    }
+
+    // Hook into existing driver select change
+    const _origDriverChange = onDriverChange;
+    async function onDriverChange() {
+        await _origDriverChange();
+        const driverId = document.getElementById('driver-select').value;
+        if (driverId) loadAnomalies(driverId);
+    }
+
+    // Load AI scores on page load
+    window.addEventListener('load', loadAIScores);
 
     window.addEventListener('load', loadSummary);
 </script>
